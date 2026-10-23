@@ -7,7 +7,7 @@ Sistema web de análise cosmética educativa: página inicial para TikTok/Instag
 | Parte | Arquivos |
 |---|---|
 | Servidor (Node.js + Express) | `src/server.js` (rotas públicas), `src/admin.js` (painel) |
-| Banco de dados (SQLite) | `src/db.js` — participantes, respostas, resultados, relatórios, consentimentos, eventos de origem/funil, notificações, erros, solicitações LGPD, usuários, auditoria, configurações |
+| Banco de dados (Turso, compatível com SQLite; arquivo local em desenvolvimento) | `src/db.js` — participantes, respostas, resultados, relatórios, consentimentos, eventos de origem/funil, notificações, erros, solicitações LGPD, usuários, auditoria, configurações |
 | Motor de análise | `src/engine.js` (regras determinísticas), `src/actives.js` (ativos + fontes verificáveis), `src/questions.js` |
 | IA (opcional) | `src/ai.js` — Claude reescreve a explicação em linguagem simples, recebendo só fatos já decididos e sem dados pessoais/saúde |
 | WhatsApp Business | `src/whatsapp.js` — Cloud API oficial da Meta, fila, reenvio, duplicidade, webhook de status |
@@ -32,12 +32,14 @@ Coloque o arquivo do logo em `public/img/` com o nome **`logo.png`** (ou `logo.j
 
 ## Publicar (endereço público permanente)
 
-O endereço só existe depois da publicação. Qualquer hospedagem Node.js com **disco persistente** serve (ex.: Render com Persistent Disk, Railway com Volume, Fly.io com Volume, ou um VPS):
+O endereço só existe depois da publicação. Configuração gratuita (arquivo `render.yaml`):
 
-- Comando de build: `npm install` · comando de início: `npm start`
-- Variáveis: veja `.env.example` (`NODE_ENV=production`, `DATA_DIR` no disco persistente, `DATA_ENCRYPTION_KEY`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`)
+- **Render (plano Free)** roda o site: New → Blueprint → este repositório.
+- **Turso (plano gratuito)** guarda os dados: crie um banco e informe `TURSO_DATABASE_URL` e `TURSO_AUTH_TOKEN` no Render.
+- **UptimeRobot (gratuito)**: monitore `https://SEU-SITE/saude` a cada 5 minutos para o site não "dormir".
+- Variáveis pedidas pelo Render: `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN`, `DATA_ENCRYPTION_KEY`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (veja `.env.example`).
 - Depois de publicar, entre em **Painel → Configurações** e informe o “Endereço público do site”. A aba **Divulgação** passa a mostrar os links com rastreamento de origem (`?utm_source=tiktok`, `instagram`, `whatsapp`, `indicacao`).
-- Faça backup periódico da pasta `DATA_DIR` e guarde a `DATA_ENCRYPTION_KEY` em local seguro.
+- Guarde a `DATA_ENCRYPTION_KEY` em local seguro: sem ela, os dados criptografados não podem ser lidos.
 
 ## O que falta configurar (serviços externos)
 

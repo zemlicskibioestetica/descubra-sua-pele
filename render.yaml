@@ -1,33 +1,32 @@
-# Configuração de publicação no Render (New → Blueprint).
-# O plano "starter" é necessário para o disco persistente, onde fica o banco de dados.
+# Publicação gratuita no Render (New → Blueprint).
+# Os dados ficam no Turso (banco gratuito na nuvem), porque o plano Free do Render
+# apaga os arquivos do servidor a cada reinício.
 services:
   - type: web
     name: descubra-sua-pele
     runtime: node
-    plan: starter
+    plan: free
     region: virginia
     buildCommand: npm ci
     startCommand: npm start
-    healthCheckPath: /api/config
-    disk:
-      name: dados
-      mountPath: /var/data
-      sizeGB: 1
+    healthCheckPath: /saude
     envVars:
       - key: NODE_ENV
         value: production
       - key: NODE_VERSION
         value: "22"
-      - key: DATA_DIR
-        value: /var/data
       - key: DISPLAY_TIMEZONE
         value: America/Sao_Paulo
+      - key: ADMIN_NAME
+        value: Dra. Fernanda Zemlicski
       # Os valores abaixo são pedidos na tela do Render ao criar o Blueprint (nunca ficam no código)
+      - key: TURSO_DATABASE_URL
+        sync: false
+      - key: TURSO_AUTH_TOKEN
+        sync: false
       - key: DATA_ENCRYPTION_KEY
         sync: false
       - key: ADMIN_EMAIL
         sync: false
       - key: ADMIN_PASSWORD
         sync: false
-      - key: ADMIN_NAME
-        value: Dra. Fernanda Zemlicski

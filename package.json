@@ -16,8 +16,8 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "latest",
-    "better-sqlite3": "latest",
-    "express": "^4.21.2",
+    "@libsql/client": "^0.18.0",
+    "express": "^5.3.0",
     "libphonenumber-js": "latest",
     "pdfkit": "latest"
   }
