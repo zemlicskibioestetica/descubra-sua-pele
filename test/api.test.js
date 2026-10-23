@@ -1,4 +1,4 @@
-// Teste de ponta a ponta da API com banco temporário.
+﻿// Teste de ponta a ponta da API com banco temporário.
 // A API do WhatsApp é SIMULADA apenas aqui, interceptando chamadas a graph.facebook.com.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -33,7 +33,7 @@ before(async () => {
   server = mod.app.listen(0);
   base = `http://127.0.0.1:${server.address().port}`;
 });
-after(() => { server?.close(); globalThis.fetch = realFetch; });
+after(() => { server?.close(); globalThis.fetch = realFetch; db?.close(); });
 
 const j = async (p, opts = {}) => {
   const res = await realFetch(base + p, { ...opts, headers: { 'Content-Type': 'application/json', ...(opts.headers || {}) }, body: opts.body ? JSON.stringify(opts.body) : undefined });
@@ -80,13 +80,13 @@ test('cadastro valida campos, telefone e consentimentos', async () => {
 
 test('fluxo completo: resultado, banco, PDF, compartilhamento, notificação não configurada', async () => {
   const { pToken, rToken } = await participant();
-  const p = db.prepare(`SELECT * FROM participants WHERE full_name='Maria Teste Silva' AND status='concluido' ORDER BY id DESC`).get();
+  const p = await db.get(`SELECT * FROM participants WHERE full_name='Maria Teste Silva' AND status='concluido' ORDER BY id DESC`);
   assert.equal(p.phone_e164, '+5541991234567');
   assert.equal(p.source, 'tiktok');
-  const consents = db.prepare('SELECT purpose, granted, policy_version FROM consents WHERE participant_id=?').all(p.id);
+  const consents = await db.all('SELECT purpose, granted, policy_version FROM consents WHERE participant_id=? ORDER BY id', p.id);
   assert.deepEqual(consents.map((c) => [c.purpose, c.granted]), [['participacao', 1], ['dados_saude', 1], ['whatsapp_publicidade', 0]]);
   assert.ok(consents.every((c) => c.policy_version));
-  const ans = db.prepare('SELECT health_enc FROM answers WHERE participant_id=?').get(p.id);
+  const ans = await db.get('SELECT health_enc FROM answers WHERE participant_id=?', p.id);
   assert.ok(ans.health_enc.startsWith('v1:') && !ans.health_enc.includes('nenhuma'), 'saúde criptografada');
 
   const r = await j(`/api/results/${rToken}`);
@@ -107,14 +107,14 @@ test('fluxo completo: resultado, banco, PDF, compartilhamento, notificação nã
   assert.doesNotMatch(sharePage, /Maria|991234567/);
 
   await wait(50);
-  const n = db.prepare(`SELECT * FROM notifications WHERE participant_id=? AND kind='owner_completion'`).all(p.id);
+  const n = await db.all(`SELECT * FROM notifications WHERE participant_id=? AND kind='owner_completion'`, p.id);
   assert.equal(n.length, 1, 'uma notificação por conclusão');
   assert.equal(n[0].status, 'nao_configurada', 'sem credenciais, não finge envio');
 });
 
 test('painel: login, permissões, CSV sem saúde, métricas', async () => {
-  db.prepare(`INSERT INTO admin_users(email, name, password_hash, role) VALUES('dona@teste.com','Dona',?, 'proprietaria')`).run(hashPassword('SenhaForte123'));
-  db.prepare(`INSERT INTO admin_users(email, name, password_hash, role) VALUES('equipe@teste.com','Equipe',?, 'equipe')`).run(hashPassword('SenhaForte123'));
+  await db.run(`INSERT INTO admin_users(email, name, password_hash, role) VALUES('dona@teste.com','Dona',?, 'proprietaria')`, hashPassword('SenhaForte123'));
+  await db.run(`INSERT INTO admin_users(email, name, password_hash, role) VALUES('equipe@teste.com','Equipe',?, 'equipe')`, hashPassword('SenhaForte123'));
   assert.equal((await j('/api/admin/participants')).status, 401, 'sem login');
   assert.equal((await login('dona@teste.com', 'errada')).status, 401);
   const o = await login('dona@teste.com', 'SenhaForte123'); ownerCookie = o.cookie; ownerCsrf = o.csrf;
@@ -130,7 +130,7 @@ test('painel: login, permissões, CSV sem saúde, métricas', async () => {
   assert.equal((await adm('/settings', {}, staff)).status, 403);
   const rep = await adm(`/participants/${id}/report?reason=teste`);
   assert.equal(rep.status, 200); assert.ok(rep.body.health.length === 9);
-  assert.ok(db.prepare(`SELECT 1 FROM audit_log WHERE action='ver_relatorio_e_saude'`).get(), 'acesso auditado');
+  assert.ok(await db.get(`SELECT 1 AS x FROM audit_log WHERE action='ver_relatorio_e_saude'`), 'acesso auditado');
 
   const csv = await realFetch(`${base}/api/admin/export.csv`, { headers: { Cookie: ownerCookie } });
   const text = await csv.text();
@@ -147,8 +147,8 @@ test('WhatsApp: envio confirmado, falha registrada com reenvio, sem dados de sa�
   assert.equal(put.status, 200);
   await wait(100);
   // a notificação "não configurada" anterior volta para a fila e é enviada
-  assert.equal(db.prepare(`SELECT COUNT(*) n FROM notifications WHERE status='nao_configurada'`).get().n, 0);
-  const sent = db.prepare(`SELECT * FROM notifications WHERE status='enviada'`).all();
+  assert.equal((await db.get(`SELECT COUNT(*) n FROM notifications WHERE status='nao_configurada'`)).n, 0);
+  const sent = await db.all(`SELECT * FROM notifications WHERE status='enviada'`);
   assert.ok(sent.length >= 1 && sent[0].provider_message_id.startsWith('wamid.'));
   const call = waCalls.at(-1);
   assert.equal(call.body.template.name, 'novo_participante_pele');
@@ -160,10 +160,10 @@ test('WhatsApp: envio confirmado, falha registrada com reenvio, sem dados de sa�
   waMode = 'fail';
   await participant({ fullName: 'Joana Falha Souza', phone: '991112222' });
   await wait(100);
-  const failed = db.prepare(`SELECT n.* FROM notifications n JOIN participants p ON p.id=n.participant_id WHERE p.full_name='Joana Falha Souza'`).get();
+  const failed = await db.get(`SELECT n.* FROM notifications n JOIN participants p ON p.id=n.participant_id WHERE p.full_name='Joana Falha Souza'`);
   assert.equal(failed.status, 'falhou');
   assert.ok(failed.next_attempt_at, 'reenvio agendado');
-  assert.ok(db.prepare(`SELECT 1 FROM error_logs WHERE scope='whatsapp'`).get());
+  assert.ok(await db.get(`SELECT 1 AS x FROM error_logs WHERE scope='whatsapp'`));
 
   waMode = 'ok';
   const retry = await adm(`/notifications/${failed.id}/retry`, { method: 'POST' });
@@ -174,13 +174,14 @@ test('exclusão LGPD remove os dados do participante', async () => {
   const { rToken } = await participant({ fullName: 'Carla Excluir Lima', phone: '993334444' });
   const req = await j('/api/privacy-requests', { method: 'POST', body: { type: 'exclusao', name: 'Carla Excluir Lima', country: 'BR', phone: '41993334444' } });
   assert.equal(req.status, 201);
-  const pr = db.prepare(`SELECT * FROM privacy_requests WHERE requester_name='Carla Excluir Lima'`).get();
+  const pr = await db.get(`SELECT * FROM privacy_requests WHERE requester_name='Carla Excluir Lima'`);
   assert.ok(pr.participant_id, 'vinculada pelo celular');
+  const pid = pr.participant_id;
   const bad = await adm(`/privacy-requests/${pr.id}/resolve`, { method: 'POST', body: { action: 'excluir_dados' } });
   assert.equal(bad.status, 422, 'exige confirmação');
   const ok = await adm(`/privacy-requests/${pr.id}/resolve`, { method: 'POST', body: { action: 'excluir_dados', confirm: 'EXCLUIR' } });
   assert.equal(ok.status, 200);
-  assert.equal(db.prepare('SELECT COUNT(*) n FROM participants WHERE id=?').get(pr.participant_id).n, 0);
-  assert.equal(db.prepare('SELECT COUNT(*) n FROM answers WHERE participant_id=?').get(pr.participant_id).n, 0);
+  assert.equal((await db.get('SELECT COUNT(*) n FROM participants WHERE id=?', pid)).n, 0);
+  assert.equal((await db.get('SELECT COUNT(*) n FROM answers WHERE participant_id=?', pid)).n, 0);
   assert.equal((await j(`/api/results/${rToken}`)).status, 404);
 });

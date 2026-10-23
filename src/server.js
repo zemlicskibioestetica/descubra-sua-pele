@@ -7,10 +7,11 @@ import { DATA_DIR } from './db.js';
 
 initKey(DATA_DIR); // precisa vir antes de qualquer leitura de configuração secreta
 
-const { db, getSetting, logError, deleteParticipantData } = await import('./db.js');
+const { db, initDb, getSetting, logError, deleteParticipantData } = await import('./db.js');
+await initDb();
 const { HEALTH_QUESTIONS, SKIN_QUESTIONS, GOALS, SEX_OPTIONS, validateAnswers, goalLabel } = await import('./questions.js');
 const { CONSENTS } = await import('./consents.js');
-const { analyze, SKIN_TYPE_LABELS } = await import('./engine.js');
+const { analyze } = await import('./engine.js');
 const { explainWithAI } = await import('./ai.js');
 const { renderResultPdf } = await import('./pdf.js');
 const wa = await import('./whatsapp.js');
@@ -41,14 +42,17 @@ app.use((req, res, next) => {
 
 app.use(express.json({ limit: '64kb', verify: (req, _res, buf) => { req.rawBody = buf; } }));
 
+// Verificação de funcionamento (usada pela hospedagem e pelo "despertador")
+app.get('/saude', (req, res) => res.type('text').send('ok'));
+
 // ---------- Páginas ----------
 const sendPage = (file) => (req, res) => { res.set('Cache-Control', 'no-store'); res.sendFile(path.join(PUBLIC_DIR, file)); };
 app.get('/', sendPage('index.html'));
 app.get('/resultado/:token', sendPage('result.html'));
 app.get('/admin', sendPage('admin.html'));
 app.get('/privacidade', (req, res) => res.type('html').send(renderPrivacyPage()));
-app.get('/c/:share', (req, res) => {
-  const row = db.prepare('SELECT skin_type FROM results WHERE share_token = ?').get(String(req.params.share));
+app.get('/c/:share', async (req, res) => {
+  const row = await db.get('SELECT skin_type FROM results WHERE share_token = ?', String(req.params.share));
   if (!row) return res.status(404).type('html').send(renderSharePage(null));
   res.type('html').send(renderSharePage(row.skin_type));
 });
@@ -79,16 +83,16 @@ api.get('/countries', (req, res) => { res.set('Cache-Control', 'public, max-age=
 api.get('/questions', (req, res) => res.json({ health: HEALTH_QUESTIONS, skin: SKIN_QUESTIONS }));
 
 const CLIENT_EVENTS = new Set(['visit', 'start', 'consent', 'registered', 'step', 'pdf', 'share', 'contact_click', 'blocked_minor']);
-const insertEvent = db.prepare('INSERT INTO events(anon_id, type, source, campaign, step) VALUES(?,?,?,?,?)');
-api.post('/events', rateLimit({ key: 'ev', limit: 300, windowMs: 10 * 60_000 }), (req, res) => {
+const INSERT_EVENT = 'INSERT INTO events(anon_id, type, source, campaign, step) VALUES(?,?,?,?,?)';
+api.post('/events', rateLimit({ key: 'ev', limit: 300, windowMs: 10 * 60_000 }), async (req, res) => {
   const { anonId, type, source, campaign, step } = req.body || {};
   if (typeof anonId !== 'string' || !/^[A-Za-z0-9_-]{8,64}$/.test(anonId) || !CLIENT_EVENTS.has(type)) return res.status(400).json({ error: 'Evento inválido.' });
-  insertEvent.run(anonId, type, normalizeSource(source), cleanText(campaign, 60) || null, cleanText(step, 20) || null);
+  await db.run(INSERT_EVENT, anonId, type, normalizeSource(source), cleanText(campaign, 60) || null, cleanText(step, 20) || null);
   res.status(204).end();
 });
 
 // Cadastro + consentimentos
-api.post('/participants', rateLimit({ key: 'reg', limit: 20, windowMs: 60 * 60_000 }), (req, res) => {
+api.post('/participants', rateLimit({ key: 'reg', limit: 20, windowMs: 60 * 60_000 }), async (req, res) => {
   const b = req.body || {};
   const errors = {};
   const fullName = cleanText(b.fullName, 120);
@@ -121,25 +125,22 @@ api.post('/participants', rateLimit({ key: 'reg', limit: 20, windowMs: 60 * 60_0
   const policyVersion = getSetting('policy_version');
   const ua = cleanText(req.get('user-agent'), 200);
   const source = normalizeSource(b.source);
-  const tx = db.transaction(() => {
-    const info = db.prepare(`INSERT INTO participants(public_id, token_hash, full_name, country_iso, calling_code, area_code, phone_e164, has_whatsapp,
-      birth_date, sex, city, region, goal, goal_other, is_minor, guardian_name, source, campaign) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
-      .run(randomToken(9), sha256(token), fullName, b.country, phone.callingCode, cleanText(b.areaCode, 8) || null, phone.e164,
-        b.hasWhatsapp === 'sim' ? 1 : 0, b.birthDate, b.sex, city, region, b.goal, goalOther, minor ? 1 : 0, guardianName, source, cleanText(b.campaign, 60) || null);
-    const pid = info.lastInsertRowid;
-    const ins = db.prepare('INSERT INTO consents(participant_id, purpose, granted, policy_version, text_snapshot, user_agent) VALUES(?,?,?,?,?,?)');
+  await db.tx(async (t) => {
+    const info = await t.run(`INSERT INTO participants(public_id, token_hash, full_name, country_iso, calling_code, area_code, phone_e164, has_whatsapp,
+      birth_date, sex, city, region, goal, goal_other, is_minor, guardian_name, source, campaign) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    randomToken(9), sha256(token), fullName, b.country, phone.callingCode, cleanText(b.areaCode, 8) || null, phone.e164,
+    b.hasWhatsapp === 'sim' ? 1 : 0, b.birthDate, b.sex, city, region, b.goal, goalOther, minor ? 1 : 0, guardianName, source, cleanText(b.campaign, 60) || null);
     for (const purpose of ['participacao', 'dados_saude', 'whatsapp_publicidade', ...(minor ? ['responsavel_legal'] : [])]) {
-      ins.run(pid, purpose, c[purpose] === true ? 1 : 0, policyVersion, CONSENTS[purpose].text, ua);
+      await t.run('INSERT INTO consents(participant_id, purpose, granted, policy_version, text_snapshot, user_agent) VALUES(?,?,?,?,?,?)',
+        info.lastInsertRowid, purpose, c[purpose] === true ? 1 : 0, policyVersion, CONSENTS[purpose].text, ua);
     }
-    return pid;
   });
-  tx();
   res.status(201).json({ participantToken: token, minor, firstName: fullName.split(' ')[0] });
 });
 
 // Envio das respostas → análise → resultado → notificação
 api.post('/participants/:token/submit', rateLimit({ key: 'sub', limit: 20, windowMs: 60 * 60_000 }), async (req, res) => {
-  const p = db.prepare('SELECT * FROM participants WHERE token_hash = ?').get(sha256(String(req.params.token)));
+  const p = await db.get('SELECT * FROM participants WHERE token_hash = ?', sha256(String(req.params.token)));
   if (!p) return res.status(404).json({ error: 'Cadastro não encontrado. Recomece o questionário.' });
   if (p.status === 'concluido') return res.status(409).json({ error: 'Este questionário já foi concluído.' });
 
@@ -163,23 +164,26 @@ api.post('/participants/:token/submit', rateLimit({ key: 'sub', limit: 20, windo
   const anonId = typeof req.body?.anonId === 'string' && /^[A-Za-z0-9_-]{8,64}$/.test(req.body.anonId) ? req.body.anonId : `srv-${randomToken(6)}`;
   let completedAt;
   try {
-    db.transaction(() => {
-      db.prepare('INSERT INTO answers(participant_id, health_enc, skin_json) VALUES(?,?,?)').run(p.id, encrypt(JSON.stringify(health.clean)), JSON.stringify(skin.clean));
-      const r = db.prepare('INSERT INTO results(participant_id, token_hash, skin_type, confidence, result_enc, ai_status, engine_version) VALUES(?,?,?,?,?,?,?)')
-        .run(p.id, sha256(resultToken), result.skinType, result.confidence, encrypt(JSON.stringify(result)), ai.status, result.engineVersion);
-      db.prepare(`INSERT INTO reports(result_id, kind, status) VALUES(?, 'web', 'gerado')`).run(r.lastInsertRowid);
-      db.prepare(`UPDATE participants SET status='concluido', completed_at=datetime('now') WHERE id=?`).run(p.id);
-      insertEvent.run(anonId, 'complete', p.source, p.campaign, null);
-      insertEvent.run(anonId, 'report', p.source, p.campaign, null);
-    })();
-    completedAt = db.prepare('SELECT completed_at FROM participants WHERE id=?').get(p.id).completed_at;
+    await db.tx(async (t) => {
+      // Garante uma única conclusão mesmo com cliques repetidos
+      const upd = await t.run(`UPDATE participants SET status='concluido', completed_at=datetime('now') WHERE id=? AND status <> 'concluido'`, p.id);
+      if (upd.changes === 0) throw Object.assign(new Error('já concluído'), { duplicate: true });
+      await t.run('INSERT INTO answers(participant_id, health_enc, skin_json) VALUES(?,?,?)', p.id, encrypt(JSON.stringify(health.clean)), JSON.stringify(skin.clean));
+      const r = await t.run('INSERT INTO results(participant_id, token_hash, skin_type, confidence, result_enc, ai_status, engine_version) VALUES(?,?,?,?,?,?,?)',
+        p.id, sha256(resultToken), result.skinType, result.confidence, encrypt(JSON.stringify(result)), ai.status, result.engineVersion);
+      await t.run(`INSERT INTO reports(result_id, kind, status) VALUES(?, 'web', 'gerado')`, r.lastInsertRowid);
+      await t.run(INSERT_EVENT, anonId, 'complete', p.source, p.campaign, null);
+      await t.run(INSERT_EVENT, anonId, 'report', p.source, p.campaign, null);
+    });
+    completedAt = (await db.get('SELECT completed_at FROM participants WHERE id=?', p.id)).completed_at;
   } catch (e) {
+    if (e.duplicate) return res.status(409).json({ error: 'Este questionário já foi concluído.' });
     logError('banco', `Falha ao gravar resultado do participante ${p.id}: ${e.message}`, e.stack);
     return res.status(500).json({ error: 'Não foi possível salvar seu resultado. Tente novamente.' });
   }
 
   // Relatório confirmado → notificação única à proprietária (dados mínimos, nada de saúde)
-  const { row } = wa.enqueue({
+  const { row } = await wa.enqueue({
     kind: 'owner_completion', dedupeKey: `completion:${p.id}`, participantId: p.id, recipient: getSetting('owner_whatsapp'),
     params: {
       nome: p.full_name, pais: countryName(p.country_iso), telefone: p.phone_e164, regiao: `${p.city}/${p.region}`,
@@ -193,20 +197,19 @@ api.post('/participants/:token/submit', rateLimit({ key: 'sub', limit: 20, windo
   res.status(201).json({ resultToken });
 });
 
-function loadResult(token) {
-  const r = db.prepare(`SELECT r.*, p.full_name, p.phone_e164, p.has_whatsapp, p.id AS pid FROM results r JOIN participants p ON p.id = r.participant_id WHERE r.token_hash = ?`)
-    .get(sha256(String(token)));
+async function loadResult(token) {
+  const r = await db.get(`SELECT r.*, p.full_name, p.phone_e164, p.has_whatsapp, p.id AS pid FROM results r JOIN participants p ON p.id = r.participant_id WHERE r.token_hash = ?`, sha256(String(token)));
   if (!r) return null;
   return { row: r, result: JSON.parse(decrypt(r.result_enc)) };
 }
 
-api.get('/results/:token', (req, res) => {
-  const lr = loadResult(req.params.token);
+api.get('/results/:token', async (req, res) => {
+  const lr = await loadResult(req.params.token);
   if (!lr) return res.status(404).json({ error: 'Resultado não encontrado ou removido.' });
   const { row, result } = lr;
   const waReady = wa.waConfigStatus().configured && Boolean(getSetting('wa_template_participant'));
-  const contact = db.prepare('SELECT 1 FROM contact_requests WHERE participant_id = ?').get(row.pid);
-  const waSent = db.prepare(`SELECT status FROM notifications WHERE dedupe_key = ?`).get(`report:${row.pid}`);
+  const contact = await db.get('SELECT 1 AS x FROM contact_requests WHERE participant_id = ?', row.pid);
+  const waSent = await db.get('SELECT status FROM notifications WHERE dedupe_key = ?', `report:${row.pid}`);
   res.json({
     name: row.full_name,
     generatedAt: fmtDateTime(row.created_at),
@@ -222,17 +225,17 @@ api.get('/results/:token', (req, res) => {
   });
 });
 
-api.get('/results/:token/pdf', rateLimit({ key: 'pdf', limit: 30, windowMs: 60 * 60_000 }), (req, res) => {
-  const lr = loadResult(req.params.token);
+api.get('/results/:token/pdf', rateLimit({ key: 'pdf', limit: 30, windowMs: 60 * 60_000 }), async (req, res) => {
+  const lr = await loadResult(req.params.token);
   if (!lr) return res.status(404).json({ error: 'Resultado não encontrado.' });
   const { row, result } = lr;
   try {
     const doc = renderResultPdf(result, { name: row.full_name, generatedAt: fmtDateTime(row.created_at), publicDir: PUBLIC_DIR, explanation: result.aiExplanation || result.explanation });
-    db.prepare(`INSERT INTO reports(result_id, kind, status) VALUES(?, 'pdf', 'gerado')`).run(row.id);
+    await db.run(`INSERT INTO reports(result_id, kind, status) VALUES(?, 'pdf', 'gerado')`, row.id);
     res.set({ 'Content-Type': 'application/pdf', 'Content-Disposition': `${req.query.inline ? 'inline' : 'attachment'}; filename="meu-perfil-de-pele.pdf"` });
     doc.pipe(res);
   } catch (e) {
-    db.prepare(`INSERT INTO reports(result_id, kind, status) VALUES(?, 'pdf', 'erro')`).run(row.id);
+    await db.run(`INSERT INTO reports(result_id, kind, status) VALUES(?, 'pdf', 'erro')`, row.id).catch(() => {});
     logError('pdf', `Falha ao gerar PDF do resultado ${row.id}: ${e.message}`, e.stack);
     res.status(500).json({ error: 'Não foi possível gerar o PDF agora.' });
   }
@@ -240,29 +243,28 @@ api.get('/results/:token/pdf', rateLimit({ key: 'pdf', limit: 30, windowMs: 60 *
 
 const baseUrl = (req) => (getSetting('public_base_url') || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '');
 
-api.post('/results/:token/share', (req, res) => {
-  const lr = loadResult(req.params.token);
+api.post('/results/:token/share', async (req, res) => {
+  const lr = await loadResult(req.params.token);
   if (!lr) return res.status(404).json({ error: 'Resultado não encontrado.' });
   let share = lr.row.share_token;
-  if (!share) { share = randomToken(9); db.prepare('UPDATE results SET share_token=? WHERE id=?').run(share, lr.row.id); }
+  if (!share) { share = randomToken(9); await db.run('UPDATE results SET share_token=? WHERE id=?', share, lr.row.id); }
   res.json({ url: `${baseUrl(req)}/c/${share}` });
 });
 
-api.post('/results/:token/contact', rateLimit({ key: 'ct', limit: 5, windowMs: 60 * 60_000 }), (req, res) => {
-  const lr = loadResult(req.params.token);
+api.post('/results/:token/contact', rateLimit({ key: 'ct', limit: 5, windowMs: 60 * 60_000 }), async (req, res) => {
+  const lr = await loadResult(req.params.token);
   if (!lr) return res.status(404).json({ error: 'Resultado não encontrado.' });
   if (req.body?.consent !== true) return res.status(422).json({ error: 'Para registrarmos sua solicitação, marque a autorização de contato.' });
-  const { row } = lr;
-  const p = db.prepare('SELECT * FROM participants WHERE id=?').get(row.pid);
-  const existing = db.prepare('SELECT id FROM contact_requests WHERE participant_id=?').get(p.id);
+  const p = await db.get('SELECT * FROM participants WHERE id=?', lr.row.pid);
+  const existing = await db.get('SELECT id FROM contact_requests WHERE participant_id=?', p.id);
   if (!existing) {
-    db.transaction(() => {
-      db.prepare('INSERT INTO contact_requests(participant_id, message) VALUES(?,?)').run(p.id, cleanText(req.body?.message, 500) || null);
-      db.prepare('INSERT INTO consents(participant_id, purpose, granted, policy_version, text_snapshot, user_agent) VALUES(?,?,1,?,?,?)')
-        .run(p.id, 'contato_avaliacao', getSetting('policy_version'), CONSENTS.contato_avaliacao.text, cleanText(req.get('user-agent'), 200));
-      insertEvent.run(`pid-${p.public_id}`, 'contact_request', p.source, p.campaign, null);
-    })();
-    const { row: n } = wa.enqueue({
+    await db.tx(async (t) => {
+      await t.run('INSERT INTO contact_requests(participant_id, message) VALUES(?,?)', p.id, cleanText(req.body?.message, 500) || null);
+      await t.run('INSERT INTO consents(participant_id, purpose, granted, policy_version, text_snapshot, user_agent) VALUES(?,?,1,?,?,?)',
+        p.id, 'contato_avaliacao', getSetting('policy_version'), CONSENTS.contato_avaliacao.text, cleanText(req.get('user-agent'), 200));
+      await t.run(INSERT_EVENT, `pid-${p.public_id}`, 'contact_request', p.source, p.campaign, null);
+    });
+    const { row: n } = await wa.enqueue({
       kind: 'owner_contact', dedupeKey: `contact:${p.id}`, participantId: p.id, recipient: getSetting('owner_whatsapp'),
       params: { nome: p.full_name, telefone: p.phone_e164, data: fmtDateTime(new Date().toISOString().slice(0, 19).replace('T', ' ')), origem: SOURCES[p.source] || p.source },
     });
@@ -272,26 +274,26 @@ api.post('/results/:token/contact', rateLimit({ key: 'ct', limit: 5, windowMs: 6
 });
 
 api.post('/results/:token/whatsapp', rateLimit({ key: 'wr', limit: 5, windowMs: 60 * 60_000 }), async (req, res) => {
-  const lr = loadResult(req.params.token);
+  const lr = await loadResult(req.params.token);
   if (!lr) return res.status(404).json({ error: 'Resultado não encontrado.' });
   if (req.body?.consent !== true) return res.status(422).json({ error: 'Marque a autorização para enviarmos o link.' });
   if (!wa.waConfigStatus().configured || !getSetting('wa_template_participant')) return res.status(409).json({ error: 'O envio pelo WhatsApp não está disponível no momento. Use o botão de PDF para salvar seu resultado.' });
-  const p = db.prepare('SELECT * FROM participants WHERE id=?').get(lr.row.pid);
+  const p = await db.get('SELECT * FROM participants WHERE id=?', lr.row.pid);
   if (!p.has_whatsapp) return res.status(409).json({ error: 'O número cadastrado não foi informado como WhatsApp.' });
-  db.prepare('INSERT INTO consents(participant_id, purpose, granted, policy_version, text_snapshot, user_agent) VALUES(?,?,1,?,?,?)')
-    .run(p.id, 'envio_relatorio_whatsapp', getSetting('policy_version'), CONSENTS.envio_relatorio_whatsapp.text, cleanText(req.get('user-agent'), 200));
-  const { row: n, duplicate } = wa.enqueue({
+  await db.run('INSERT INTO consents(participant_id, purpose, granted, policy_version, text_snapshot, user_agent) VALUES(?,?,1,?,?,?)',
+    p.id, 'envio_relatorio_whatsapp', getSetting('policy_version'), CONSENTS.envio_relatorio_whatsapp.text, cleanText(req.get('user-agent'), 200));
+  const { row: n, duplicate } = await wa.enqueue({
     kind: 'participant_report', dedupeKey: `report:${p.id}`, participantId: p.id, recipient: p.phone_e164,
     params: { nome: p.full_name.split(' ')[0], link: `${baseUrl(req)}/resultado/${req.params.token}` },
   });
   if (!duplicate) await wa.processNotification(n.id);
-  const status = db.prepare('SELECT status, last_error FROM notifications WHERE id=?').get(n.id);
+  const status = await db.get('SELECT status, last_error FROM notifications WHERE id=?', n.id);
   if (['enviada', 'entregue', 'lida'].includes(status.status)) return res.json({ ok: true, message: 'Link enviado para o seu WhatsApp.' });
   res.status(502).json({ error: 'Não conseguimos confirmar o envio pelo WhatsApp agora. Salve seu resultado em PDF; a equipe verificará a falha.' });
 });
 
 // Solicitações de privacidade (acesso, correção, exclusão, revogação)
-api.post('/privacy-requests', rateLimit({ key: 'pr', limit: 5, windowMs: 60 * 60_000 }), (req, res) => {
+api.post('/privacy-requests', rateLimit({ key: 'pr', limit: 5, windowMs: 60 * 60_000 }), async (req, res) => {
   const b = req.body || {};
   const types = ['acesso', 'correcao', 'exclusao', 'revogacao'];
   if (!types.includes(b.type)) return res.status(422).json({ error: 'Selecione o tipo de solicitação.' });
@@ -299,9 +301,9 @@ api.post('/privacy-requests', rateLimit({ key: 'pr', limit: 5, windowMs: 60 * 60
   if (name.length < 3) return res.status(422).json({ error: 'Informe seu nome completo.' });
   const phone = validatePhone(String(b.country || 'BR'), '', b.phone);
   if (phone.error) return res.status(422).json({ error: 'Informe o celular cadastrado, com DDD (formato internacional ou do país selecionado).' });
-  const match = db.prepare('SELECT id FROM participants WHERE phone_e164 = ? ORDER BY id DESC').get(phone.e164);
-  db.prepare(`INSERT INTO privacy_requests(participant_id, type, requester_name, phone, message, origin) VALUES(?,?,?,?,?, 'publico')`)
-    .run(match?.id ?? null, b.type, name, phone.e164, cleanText(b.message, 1000) || null);
+  const match = await db.get('SELECT id FROM participants WHERE phone_e164 = ? ORDER BY id DESC', phone.e164);
+  await db.run(`INSERT INTO privacy_requests(participant_id, type, requester_name, phone, message, origin) VALUES(?,?,?,?,?, 'publico')`,
+    match?.id ?? null, b.type, name, phone.e164, cleanText(b.message, 1000) || null);
   res.status(201).json({ ok: true, message: 'Solicitação registrada. Para sua segurança, a identidade será confirmada pelo WhatsApp informado antes do atendimento.' });
 });
 
@@ -311,9 +313,9 @@ app.get('/webhooks/whatsapp', (req, res) => {
   if (verify && req.query['hub.mode'] === 'subscribe' && req.query['hub.verify_token'] === verify) return res.send(String(req.query['hub.challenge'] ?? ''));
   res.sendStatus(403);
 });
-app.post('/webhooks/whatsapp', (req, res) => {
+app.post('/webhooks/whatsapp', async (req, res) => {
   if (!wa.verifyWebhookSignature(req.rawBody || Buffer.alloc(0), req.get('x-hub-signature-256'))) return res.sendStatus(401);
-  try { wa.applyStatusWebhook(req.body); } catch (e) { logError('webhook', e.message, e.stack); }
+  try { await wa.applyStatusWebhook(req.body); } catch (e) { logError('webhook', e.message, e.stack); }
   res.sendStatus(200);
 });
 
@@ -328,36 +330,38 @@ app.use((err, req, res, _next) => {
 });
 
 // ---------- Tarefas de manutenção ----------
-function retentionJob() {
+async function retentionJob() {
   try {
     const days = Math.max(30, Number(getSetting('retention_days')) || 730);
-    const old = db.prepare(`SELECT id FROM participants WHERE created_at < datetime('now', ?)`).all(`-${days} days`);
-    for (const { id } of old) deleteParticipantData(id);
+    const old = await db.all(`SELECT id FROM participants WHERE created_at < datetime('now', ?)`, `-${days} days`);
+    for (const { id } of old) await deleteParticipantData(id);
     if (old.length) console.log(`[retenção] ${old.length} participante(s) removido(s) após ${days} dias.`);
-    db.prepare(`DELETE FROM admin_sessions WHERE expires_at < datetime('now')`).run();
-    db.prepare(`DELETE FROM error_logs WHERE created_at < datetime('now', '-365 days')`).run();
+    await db.run(`DELETE FROM admin_sessions WHERE expires_at < datetime('now')`);
+    await db.run(`DELETE FROM error_logs WHERE created_at < datetime('now', '-365 days')`);
   } catch (e) { logError('retencao', e.message, e.stack); }
 }
 
 // Primeira conta administrativa via variáveis de ambiente (útil em hospedagens sem terminal)
-function bootstrapAdmin() {
-  const count = db.prepare('SELECT COUNT(*) AS n FROM admin_users').get().n;
-  if (count === 0 && process.env.ADMIN_EMAIL && process.env.ADMIN_PASSWORD) {
-    db.prepare(`INSERT INTO admin_users(email, name, password_hash, role) VALUES(?,?,?, 'proprietaria')`)
-      .run(process.env.ADMIN_EMAIL.toLowerCase(), process.env.ADMIN_NAME || 'Dra. Fernanda Zemlicski', hashPassword(process.env.ADMIN_PASSWORD));
-    console.log(`[admin] Conta da proprietária criada para ${process.env.ADMIN_EMAIL}. Remova ADMIN_PASSWORD das variáveis após o primeiro acesso.`);
-  } else if (count === 0) {
-    console.warn('[admin] Nenhum usuário administrativo. Rode: npm run create-admin -- email@exemplo.com "Senha" "Nome"');
+async function bootstrapAdmin() {
+  const { n } = await db.get('SELECT COUNT(*) AS n FROM admin_users');
+  if (n === 0 && process.env.ADMIN_EMAIL && process.env.ADMIN_PASSWORD) {
+    await db.run(`INSERT INTO admin_users(email, name, password_hash, role) VALUES(?,?,?, 'proprietaria')`,
+      process.env.ADMIN_EMAIL.toLowerCase().trim(), process.env.ADMIN_NAME || 'Dra. Fernanda Zemlicski', hashPassword(process.env.ADMIN_PASSWORD));
+    console.log(`[admin] Conta da proprietária criada para ${process.env.ADMIN_EMAIL}.`);
+  } else if (n === 0) {
+    console.warn('[admin] Nenhum usuário administrativo. Defina ADMIN_EMAIL e ADMIN_PASSWORD ou rode: npm run create-admin -- email@exemplo.com "Senha" "Nome"');
   }
 }
 
-export function start() {
-  bootstrapAdmin();
-  retentionJob();
+export async function start() {
+  await bootstrapAdmin();
+  await retentionJob();
   setInterval(retentionJob, 12 * 60 * 60_000).unref();
   wa.startRetryWorker();
   return app.listen(PORT, () => console.log(`Descubra Sua Pele rodando em http://localhost:${PORT}`));
 }
 
 export { app };
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) start();
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  start().catch((e) => { console.error('Falha ao iniciar:', e); process.exit(1); });
+}

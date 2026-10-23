@@ -56,15 +56,15 @@ const CONTACT_PARAM_ORDER = ['nome', 'telefone', 'data', 'origem'];
  * Enfileira uma notificação. Retorna a linha criada ou a existente (duplicidade).
  * kind: owner_completion | owner_contact | participant_report | test
  */
-export function enqueue({ kind, dedupeKey, participantId = null, recipient, params }) {
+export async function enqueue({ kind, dedupeKey, participantId = null, recipient, params }) {
   const preview = kind === 'owner_completion' ? ownerMessageText(params)
     : kind === 'owner_contact' ? contactMessageText(params)
     : kind === 'participant_report' ? `Link do resultado enviado ao participante`
     : 'Mensagem de teste do painel — Descubra Sua Pele';
-  const info = db.prepare(`INSERT OR IGNORE INTO notifications(participant_id, kind, dedupe_key, recipient, body_preview, params_enc, status, next_attempt_at)
-    VALUES(?,?,?,?,?,?, 'pendente', datetime('now'))`)
-    .run(participantId, kind, dedupeKey, recipient || '', preview, encrypt(JSON.stringify(params)));
-  const row = db.prepare('SELECT * FROM notifications WHERE dedupe_key = ?').get(dedupeKey);
+  const info = await db.run(`INSERT OR IGNORE INTO notifications(participant_id, kind, dedupe_key, recipient, body_preview, params_enc, status, next_attempt_at)
+    VALUES(?,?,?,?,?,?, 'pendente', datetime('now'))`,
+  participantId, kind, dedupeKey, recipient || '', preview, encrypt(JSON.stringify(params)));
+  const row = await db.get('SELECT * FROM notifications WHERE dedupe_key = ?', dedupeKey);
   return { row, duplicate: info.changes === 0 };
 }
 
@@ -123,37 +123,34 @@ export async function processNotification(id) {
   if (sending.has(id)) return;
   sending.add(id);
   try {
-    const n = db.prepare('SELECT * FROM notifications WHERE id = ?').get(id);
+    const n = await db.get('SELECT * FROM notifications WHERE id = ?', id);
     if (!n || ['enviada', 'entregue', 'lida', 'cancelada'].includes(n.status)) return;
     // Mensagens à proprietária usam sempre o número configurado no momento do envio
     if (n.kind !== 'participant_report') {
       const owner = getSetting('owner_whatsapp');
-      if (owner && owner !== n.recipient) { db.prepare('UPDATE notifications SET recipient=? WHERE id=?').run(owner, id); n.recipient = owner; }
+      if (owner && owner !== n.recipient) { await db.run('UPDATE notifications SET recipient=? WHERE id=?', owner, id); n.recipient = owner; }
     }
     const params = JSON.parse(decrypt(n.params_enc) || '{}');
     const cfg = waConfigStatus();
     if (n.kind === 'participant_report' && !getSetting('wa_template_participant')) cfg.missing.push('Modelo para envio ao participante');
     if (!getSetting('wa_phone_number_id') || !getSetting('wa_access_token') || (n.kind !== 'participant_report' && !n.recipient)) {
-      db.prepare(`UPDATE notifications SET status='nao_configurada', last_error=?, updated_at=datetime('now'), next_attempt_at=NULL WHERE id=?`)
-        .run(`Integração não configurada. Falta: ${cfg.missing.join(', ')}`, id);
+      await db.run(`UPDATE notifications SET status='nao_configurada', last_error=?, updated_at=datetime('now'), next_attempt_at=NULL WHERE id=?`, `Integração não configurada. Falta: ${cfg.missing.join(', ')}`, id);
       return;
     }
     let payload;
     try { payload = buildPayload(n, params); } catch (e) {
-      db.prepare(`UPDATE notifications SET status='falhou', last_error=?, updated_at=datetime('now'), next_attempt_at=NULL WHERE id=?`).run(e.message, id);
+      await db.run(`UPDATE notifications SET status='falhou', last_error=?, updated_at=datetime('now'), next_attempt_at=NULL WHERE id=?`, e.message, id);
       return;
     }
     let r;
     try { r = await callApi(payload); } catch (e) { r = { ok: false, error: `Erro de rede: ${e.message}`, permanent: false }; }
     const attempts = n.attempts + 1;
     if (r.ok) {
-      db.prepare(`UPDATE notifications SET status='enviada', attempts=?, provider_message_id=?, last_error=NULL, sent_at=datetime('now'), updated_at=datetime('now'), next_attempt_at=NULL WHERE id=?`)
-        .run(attempts, r.id, id);
+      await db.run(`UPDATE notifications SET status='enviada', attempts=?, provider_message_id=?, last_error=NULL, sent_at=datetime('now'), updated_at=datetime('now'), next_attempt_at=NULL WHERE id=?`, attempts, r.id, id);
     } else {
       const retry = !r.permanent && attempts < MAX_ATTEMPTS;
-      db.prepare(`UPDATE notifications SET status='falhou', attempts=?, last_error=?, updated_at=datetime('now'),
-        next_attempt_at = CASE WHEN ? THEN datetime('now', ?) ELSE NULL END WHERE id=?`)
-        .run(attempts, r.error, retry ? 1 : 0, `+${BACKOFF_MIN[attempts - 1] ?? 240} minutes`, id);
+      await db.run(`UPDATE notifications SET status='falhou', attempts=?, last_error=?, updated_at=datetime('now'),
+        next_attempt_at = CASE WHEN ? THEN datetime('now', ?) ELSE NULL END WHERE id=?`, attempts, r.error, retry ? 1 : 0, `+${BACKOFF_MIN[attempts - 1] ?? 240} minutes`, id);
       logError('whatsapp', `Notificação ${id} (${n.kind}) falhou: ${r.error}`);
     }
   } catch (e) {
@@ -166,7 +163,7 @@ export async function processNotification(id) {
 // Reenvio automático das falhas temporárias
 export function startRetryWorker() {
   const tick = async () => {
-    const due = db.prepare(`SELECT id FROM notifications WHERE status IN ('pendente','falhou') AND next_attempt_at IS NOT NULL AND next_attempt_at <= datetime('now') LIMIT 20`).all();
+    const due = await db.all(`SELECT id FROM notifications WHERE status IN ('pendente','falhou') AND next_attempt_at IS NOT NULL AND next_attempt_at <= datetime('now') LIMIT 20`);
     for (const { id } of due) await processNotification(id);
   };
   setInterval(() => tick().catch((e) => logError('whatsapp', e.message)), 60_000).unref();
@@ -174,9 +171,8 @@ export function startRetryWorker() {
 }
 
 // Reenvio manual pelo painel (também usado após configurar a integração)
-export function resetForRetry(id) {
-  db.prepare(`UPDATE notifications SET status='pendente', next_attempt_at=datetime('now'), attempts = CASE WHEN attempts >= ? THEN 0 ELSE attempts END, updated_at=datetime('now') WHERE id=? AND status IN ('falhou','nao_configurada')`)
-    .run(MAX_ATTEMPTS, id);
+export async function resetForRetry(id) {
+  await db.run(`UPDATE notifications SET status='pendente', next_attempt_at=datetime('now'), attempts = CASE WHEN attempts >= ? THEN 0 ELSE attempts END, updated_at=datetime('now') WHERE id=? AND status IN ('falhou','nao_configurada')`, MAX_ATTEMPTS, id);
 }
 
 // ---------- Webhook de status (entregue / lida / falhou) ----------
@@ -189,7 +185,7 @@ export function verifyWebhookSignature(rawBody, header) {
   return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 
-export function applyStatusWebhook(body) {
+export async function applyStatusWebhook(body) {
   const map = { sent: 'enviada', delivered: 'entregue', read: 'lida', failed: 'falhou' };
   for (const entry of body?.entry ?? []) {
     for (const change of entry.changes ?? []) {
@@ -197,8 +193,7 @@ export function applyStatusWebhook(body) {
         const status = map[st.status];
         if (!status || !st.id) continue;
         const err = st.errors?.[0] ? `${st.errors[0].code}: ${st.errors[0].title || st.errors[0].message}` : null;
-        db.prepare(`UPDATE notifications SET status=?, last_error=COALESCE(?, last_error), updated_at=datetime('now') WHERE provider_message_id=?`)
-          .run(status, err, st.id);
+        await db.run(`UPDATE notifications SET status=?, last_error=COALESCE(?, last_error), updated_at=datetime('now') WHERE provider_message_id=?`, status, err, st.id);
         if (status === 'falhou') logError('whatsapp', `Meta informou falha de entrega da mensagem ${st.id}: ${err}`);
       }
     }
