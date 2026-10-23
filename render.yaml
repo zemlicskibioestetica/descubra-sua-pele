@@ -1,0 +1,33 @@
+# Configuração de publicação no Render (New → Blueprint).
+# O plano "starter" é necessário para o disco persistente, onde fica o banco de dados.
+services:
+  - type: web
+    name: descubra-sua-pele
+    runtime: node
+    plan: starter
+    region: virginia
+    buildCommand: npm ci
+    startCommand: npm start
+    healthCheckPath: /api/config
+    disk:
+      name: dados
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: "22"
+      - key: DATA_DIR
+        value: /var/data
+      - key: DISPLAY_TIMEZONE
+        value: America/Sao_Paulo
+      # Os valores abaixo são pedidos na tela do Render ao criar o Blueprint (nunca ficam no código)
+      - key: DATA_ENCRYPTION_KEY
+        sync: false
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: ADMIN_NAME
+        value: Dra. Fernanda Zemlicski
