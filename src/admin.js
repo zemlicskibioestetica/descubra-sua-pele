@@ -289,6 +289,7 @@ export function adminRouter({ baseUrl }) {
         { label: 'TikTok (vídeos/comentários)', url: mk('tiktok', 'video') },
         { label: 'Instagram (bio)', url: mk('instagram', 'bio') },
         { label: 'Instagram (stories)', url: mk('instagram', 'stories') },
+        { label: 'Facebook (página e posts)', url: mk('facebook', 'pagina') },
         { label: 'WhatsApp (status/listas)', url: mk('whatsapp') },
         { label: 'Indicação direta', url: mk('indicacao') },
       ],

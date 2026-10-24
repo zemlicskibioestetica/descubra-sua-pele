@@ -50,13 +50,14 @@ export function fmtDateTime(sqlite) {
 }
 
 export const SOURCES = {
-  tiktok: 'TikTok', instagram: 'Instagram', whatsapp: 'WhatsApp', indicacao: 'Indicação', compartilhamento: 'Resultado compartilhado', direto: 'Acesso direto', outro: 'Outro',
+  tiktok: 'TikTok', instagram: 'Instagram', facebook: 'Facebook', whatsapp: 'WhatsApp', indicacao: 'Indicação', compartilhamento: 'Resultado compartilhado', direto: 'Acesso direto', outro: 'Outro',
 };
 export function normalizeSource(s) {
   const v = String(s || '').toLowerCase().trim();
   if (!v) return 'direto';
   if (v.includes('tiktok') || v === 'tt') return 'tiktok';
   if (v.includes('insta') || v === 'ig') return 'instagram';
+  if (v.includes('face') || v === 'fb' || v.includes('messenger')) return 'facebook';
   if (v.includes('whats') || v === 'wa') return 'whatsapp';
   if (v.includes('indica') || v === 'ref' || v === 'referral') return 'indicacao';
   if (v.includes('compart') || v === 'share') return 'compartilhamento';
