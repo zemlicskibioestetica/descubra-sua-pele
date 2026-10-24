@@ -9,7 +9,9 @@ let KEY;
 export function initKey(dataDir) {
   const env = process.env.DATA_ENCRYPTION_KEY;
   if (env) {
-    KEY = Buffer.from(env, 'base64');
+    // Aceita a chave mesmo se vier com espaços, aspas ou junto com o texto do arquivo de instruções
+    const found = env.match(/[A-Za-z0-9+/]{43}=/);
+    KEY = Buffer.from(found ? found[0] : env.trim(), 'base64');
     if (KEY.length !== 32) throw new Error('DATA_ENCRYPTION_KEY deve ter 32 bytes em base64 (gere com: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'base64\'))")');
     return;
   }
