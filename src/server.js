@@ -64,7 +64,9 @@ app.get('/logo', (req, res) => {
   }
   res.status(404).end();
 });
-app.use(express.static(PUBLIC_DIR, { index: false, maxAge: PROD ? '1h' : 0 }));
+// Arquivos da página (JS/CSS): o navegador sempre confere se há versão nova antes de usar a cópia guardada,
+// para que as atualizações do sistema apareçam na hora para todo mundo
+app.use(express.static(PUBLIC_DIR, { index: false, setHeaders: (res) => res.set('Cache-Control', 'no-cache') }));
 
 // ---------- API pública ----------
 const api = express.Router();
