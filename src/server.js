@@ -152,7 +152,8 @@ api.post('/participants/:token/submit', rateLimit({ key: 'sub', limit: 20, windo
   const age = ageFrom(p.birth_date);
   let result;
   try {
-    result = analyze({ firstName, age, goal: p.goal, region: `${p.city}/${p.region}` }, health.clean, skin.clean);
+    const place = p.city.toLowerCase() === p.region.toLowerCase() ? p.city : `${p.city} (${p.region})`;
+    result = analyze({ firstName, age, goal: p.goal, region: place }, health.clean, skin.clean);
   } catch (e) {
     logError('analise', `Falha na análise do participante ${p.id}: ${e.message}`, e.stack);
     return res.status(500).json({ error: 'Não foi possível gerar sua análise agora. Tente novamente em instantes.' });

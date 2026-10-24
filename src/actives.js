@@ -39,32 +39,65 @@ export const SOURCES = {
   sunscreen: src(
     'Hughes MCB, Williams GM, Baker P, Green AC. Sunscreen and prevention of skin aging: a randomized trial. Ann Intern Med. 2013;158(11):781-790.',
     'Sunscreen and prevention of skin aging: a randomized trial'),
+  peptides: src(
+    'Gorouhi F, Maibach HI. Role of topical peptides in preventing or treating aged skin. Int J Cosmet Sci. 2009;31(5):327-345.',
+    'Role of topical peptides in preventing or treating aged skin'),
+  dmae: src(
+    'Grossman R. The role of dimethylaminoethanol in cosmetic dermatology. Am J Clin Dermatol. 2005;6(1):39-47.',
+    'The role of dimethylaminoethanol in cosmetic dermatology'),
+  hydroxyAcids: src(
+    'Kornhauser A, Coelho SG, Hearing VJ. Applications of hydroxy acids: classification, mechanisms, and photoactivity. Clin Cosmet Investig Dermatol. 2010;3:135-142.',
+    'Applications of hydroxy acids: classification, mechanisms, and photoactivity'),
+  tranexamic: src(
+    'Kim SJ, Park JY, Shibata T, Fujiwara R, Kang HY. Efficacy and possible mechanisms of topical tranexamic acid in melasma. Clin Exp Dermatol. 2016;41(5):480-485.',
+    'Efficacy and possible mechanisms of topical tranexamic acid in melasma'),
+  kojic: src(
+    'Saeedi M, Eslamifar M, Khezri K. Kojic acid applications in cosmetic and pharmaceutical preparations. Biomed Pharmacother. 2019;110:582-593.',
+    'Kojic acid applications in cosmetic and pharmaceutical preparations'),
   acneGuideline: src(
     'Zaenglein AL, et al. Guidelines of care for the management of acne vulgaris. J Am Acad Dermatol. 2016;74(5):945-973.',
     'Guidelines of care for the management of acne vulgaris'),
 };
 
 export const ACTIVES = {
-  glicerina: {
-    name: 'Glicerina',
-    purpose: 'Umectante: atrai e retém água nas camadas superficiais da pele.',
-    benefits: 'Pode aumentar a sensação de conforto e hidratação e apoiar a função de barreira.',
-    fit: 'Presente em hidratantes e séruns; costuma ser bem tolerada e pode ser usada de manhã e à noite.',
-    cautions: 'Raramente irrita, mas a fórmula completa do produto (fragrâncias, conservantes) pode causar reações.',
-    professional: 'Se surgir irritação persistente mesmo com produtos simples.',
-    sources: [SOURCES.glycerol, SOURCES.moisturizers],
+  peptideos: {
+    name: 'Peptídeos (ex.: Matrixyl®, Argireline®)',
+    purpose: 'Sinalizadores cosméticos usados em séruns e cremes antienvelhecimento.',
+    benefits: 'Podem contribuir para a aparência de firmeza e para suavizar linhas finas, com boa tolerância.',
+    fit: 'Sérum ou creme, manhã ou noite; combinam bem com ácido hialurônico e podem ser usados em noites sem retinol.',
+    cautions: 'Os resultados variam entre fórmulas e pessoas e aparecem com uso contínuo.',
+    professional: 'Para linhas mais marcadas ou flacidez, a avaliação individual indica o que mais pode ajudar.',
+    sources: [SOURCES.peptides],
   },
-  ceramidas: {
-    name: 'Ceramidas',
-    purpose: 'Lipídios semelhantes aos da barreira cutânea natural.',
-    benefits: 'Podem ajudar a reduzir a perda de água e o desconforto associado à barreira fragilizada.',
-    fit: 'Em hidratantes, especialmente à noite ou quando a pele está ressecada ou sensível.',
-    cautions: 'Texturas mais ricas podem não agradar peles muito oleosas; prefira versões leves nesse caso.',
-    professional: 'Se a pele permanecer ressecada, descamando ou com coceira apesar da hidratação.',
-    sources: [SOURCES.moisturizers],
+  dmae: {
+    name: 'DMAE',
+    purpose: 'Ativo usado em cosméticos "efeito firmador".',
+    benefits: 'Pode proporcionar sensação e aparência de pele mais firme; o efeito costuma ser discreto e depende do uso contínuo.',
+    fit: 'Sérum ou creme firmador, normalmente pela manhã, antes do protetor solar.',
+    cautions: 'Pode causar leve formigamento. Faça teste em pequena área antes do primeiro uso.',
+    professional: 'Em gestação ou amamentação, use somente com orientação profissional.',
+    sources: [SOURCES.dmae],
+  },
+  acido_glicolico: {
+    name: 'Ácido glicólico',
+    purpose: 'Alfa-hidroxiácido de esfoliação química suave.',
+    benefits: 'Pode deixar a textura mais uniforme e a pele mais luminosa.',
+    fit: 'À noite, 1 a 3 vezes por semana no início, em tônico ou sérum de concentração cosmética.',
+    cautions: 'Aumenta a sensibilidade ao sol: protetor solar diário é obrigatório. Não use na mesma noite que o retinol.',
+    professional: 'Peles sensíveis, com rosácea ou após procedimentos devem usar somente com orientação.',
+    sources: [SOURCES.hydroxyAcids],
+  },
+  clareadores: {
+    name: 'Ácidos clareadores (ácido tranexâmico, alfa-arbutin, ácido kójico)',
+    purpose: 'Ativos cosméticos que ajudam a uniformizar o tom da pele.',
+    benefits: 'Podem suavizar a aparência de manchas com uso contínuo, sempre associados ao protetor solar.',
+    fit: 'Sérum à noite (alguns também de manhã), após a limpeza e antes do hidratante.',
+    cautions: 'Os resultados levam semanas. Sem protetor solar diário, as manchas tendem a voltar.',
+    professional: 'Melasma e manchas que mudam de cor ou tamanho precisam de avaliação profissional.',
+    sources: [SOURCES.tranexamic, SOURCES.kojic],
   },
   pantenol: {
-    name: 'Pantenol (pró-vitamina B5)',
+    name: 'Pantenol (vitamina B5)',
     purpose: 'Hidratante e calmante cosmético.',
     benefits: 'Pode contribuir para o conforto da pele e para a manutenção da barreira.',
     fit: 'Em hidratantes ou séruns calmantes, manhã ou noite.',
@@ -118,7 +151,7 @@ export const ACTIVES = {
     sources: [SOURCES.salicylic, SOURCES.acneGuideline],
   },
   retinoide: {
-    name: 'Retinoide cosmético (ex.: retinol)',
+    name: 'Retinol (retinoide cosmético)',
     purpose: 'Derivado da vitamina A usado em cosméticos para textura e sinais do envelhecimento.',
     benefits: 'Pode melhorar a aparência de textura e linhas finas com uso contínuo; os efeitos variam entre pessoas.',
     fit: 'Somente à noite, em pequena quantidade, 2 a 3 vezes por semana no início, sempre com fotoproteção diária.',

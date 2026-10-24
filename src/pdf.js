@@ -33,9 +33,9 @@ export function renderResultPdf(res, { name, generatedAt, publicDir, explanation
   // Destaque do tipo
   const boxY = doc.y;
   doc.roundedRect(56, boxY, W, 62, 8).fill(C.bg);
-  doc.fillColor(C.gold).font('Helvetica').fontSize(9).text('TIPO DE PELE MAIS PROVÁVEL', 72, boxY + 12, { characterSpacing: 1 });
+  doc.fillColor(C.gold).font('Helvetica').fontSize(9).text('SEU TIPO DE PELE', 72, boxY + 12, { characterSpacing: 1 });
   doc.fillColor(C.ink).font('Times-Bold').fontSize(18).text(t(res.skinTypeLabel), 72, boxY + 26);
-  doc.font('Helvetica').fontSize(9).fillColor(C.green).text(t(`Confiança da classificação: ${res.confidenceLabel}`), 72, boxY + 12, { width: W - 32, align: 'right' });
+  if (res.assessments?.dehydration) doc.font('Helvetica').fontSize(9).fillColor(C.green).text('Com sinais de desidratação', 72, boxY + 12, { width: W - 32, align: 'right' });
   doc.y = boxY + 76;
 
   const h2 = (s) => {
@@ -47,14 +47,20 @@ export function renderResultPdf(res, { name, generatedAt, publicDir, explanation
   const p = (s, opts = {}) => doc.fillColor(opts.color || C.ink).font(opts.bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(opts.size || 10).text(t(s), 56 + (opts.indent || 0), doc.y, { width: W - (opts.indent || 0), lineGap: 2 });
   const list = (arr) => arr.forEach((s) => { p(`•  ${s}`, { indent: 6 }); doc.moveDown(0.2); });
 
+  const pairs = (arr) => arr.forEach((n) => {
+    if (typeof n === 'string') { p(`•  ${n}`, { indent: 6 }); doc.moveDown(0.2); return; }
+    if (doc.y > doc.page.height - 110) doc.addPage();
+    p(n.problem || n.title, { bold: true });
+    p(n.solution || n.text, { color: C.soft, indent: 0 });
+    doc.moveDown(0.4);
+  });
+
   h2('Resultado');
   p(explanation);
-  doc.moveDown(0.3);
-  p(res.confidenceNote, { color: C.soft, size: 8.5 });
 
-  h2('Principais necessidades cosméticas');
-  list(res.needs);
-  h2('Fatores que podem influenciar a pele');
+  h2('O que sua pele precisa e como cuidar');
+  pairs(res.needs);
+  h2('Dicas para o seu dia a dia');
   list(res.factors);
 
   const routine = (title, steps) => {
@@ -73,6 +79,14 @@ export function renderResultPdf(res, { name, generatedAt, publicDir, explanation
   };
   routine('Rotina da manhã', res.morning);
   routine('Rotina da noite', res.night);
+
+  if (res.rejuvenation) {
+    h2(`Cuidados para rejuvenescer a pele (foco em ${res.rejuvenation.stage})`);
+    p(res.rejuvenation.intro);
+    doc.moveDown(0.4);
+    pairs(res.rejuvenation.items);
+    p(`Introduza um ativo novo de cada vez. ${res.rejuvenation.professional}`, { color: C.soft, size: 9 });
+  }
 
   h2('Ativos que podem fazer sentido para sua pele');
   res.actives.forEach((a) => {

@@ -162,6 +162,11 @@ input:focus, select:focus, textarea:focus { border-color: var(--gold); outline: 
 .active-card .body { padding: 0 18px 16px; font-size: .93rem; }
 .active-card .body p { margin-bottom: .6em; }
 .sources { font-size: .8rem; color: var(--ink-soft); }
+.needs { display: grid; gap: 10px; }
+.need { border-left: 3px solid var(--brand-teal); background: #fffdfa; border-radius: 0 12px 12px 0; padding: 10px 14px; }
+.need-problem { font-weight: 600; margin: 0 0 4px; color: var(--ink); }
+.need-solution { margin: 0; color: var(--ink-soft); font-size: .95rem; }
+.rejuv { background: linear-gradient(160deg, #fff 0%, var(--sage-soft) 100%); }
 .cta-grid { display: grid; gap: 12px; }
 .meet { display: grid; gap: 6px; text-align: center; }
 .meet-alt { font-size: .88rem; color: var(--sage); padding: 6px; }

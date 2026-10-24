@@ -25,20 +25,43 @@ test('pele oleosa consistente → oleosa com confiança alta e niacinamida', () 
   assert.ok(r.actives.length <= 6, 'poucos ativos');
 });
 
-test('texto do resultado é curto e não repete as respostas', () => {
-  const r = analyze(P, SAFE_HEALTH, OILY_SKIN);
-  assert.equal(r.explanation, 'Ana, seu perfil de pele mais provável é: pele oleosa.');
-  const ind = analyze(P, SAFE_HEALTH, { ...OILY_SKIN, s1: 'nao_sei', s2: 'depende', s3: 'nao_sei', s4: 'nao_sei', s5: 'nao_sei', s6: 'varias', s7: 'nao_sei' });
-  assert.match(ind.explanation, /não foi possível determinar/);
+test('texto do resultado é curto, traz o tipo e não repete as respostas', () => {
+  const r = analyze({ ...P, age: 26 }, SAFE_HEALTH, OILY_SKIN);
+  assert.equal(r.explanation, 'Ana, seu tipo de pele é: pele oleosa.');
   const red = analyze(P, { ...SAFE_HEALTH, h9: ['ferida'] }, OILY_SKIN);
   assert.match(red.explanation, /avaliação profissional/);
-  for (const x of [r, ind, red]) assert.doesNotMatch(x.explanation, /respostas que mais pesaram|"/);
+  for (const x of [r, red]) assert.doesNotMatch(x.explanation, /respostas que mais pesaram|"|indeterminad|não foi possível/);
 });
 
-test('pele seca → seca, com ceramidas', () => {
+test('necessidades trazem problema e solução, sem repetir a resposta', () => {
+  const r = analyze(P, SAFE_HEALTH, { ...OILY_SKIN, s8: ['manchas', 'linhas'], s12: 'manchas' });
+  assert.ok(r.needs.every((n) => n.problem && n.solution));
+  assert.ok(r.needs.some((n) => n.problem === 'Manchas' && /tranexâmico/.test(n.solution)));
+  assert.ok(!JSON.stringify(r.needs).includes('Prioridade indicada'));
+  assert.ok(!r.factors.some((t) => /^Rotina atual:|^Exposição solar:/.test(t)), 'dicas, não eco das respostas');
+});
+
+test('pele seca → seca, com ácido hialurônico (sem ceramidas/glicerina)', () => {
   const r = analyze({ ...P, goal: 'hidratacao' }, SAFE_HEALTH, { ...OILY_SKIN, s1: 'ressecada', s2: 'repuxando', s3: 'pouco_visiveis', s4: 'descama', s5: 'quase_nunca', s6: 'aspera', s7: 'ressecada', s8: ['ressecamento'], s12: 'hidratacao', s11: 'frio_seco' });
   assert.equal(r.skinType, 'seca');
-  assert.ok(keys(r).includes('ceramidas'));
+  assert.ok(keys(r).includes('acido_hialuronico'));
+  assert.doesNotMatch(JSON.stringify(r), /ceramida|glicerina/i);
+});
+
+test('rejuvenescimento conforme idade e queixa, com ativos de mercado', () => {
+  const r = analyze({ ...P, age: 44, goal: 'linhas' }, SAFE_HEALTH, { ...OILY_SKIN, s8: ['linhas', 'firmeza'], s12: 'linhas' });
+  assert.ok(r.rejuvenation);
+  assert.equal(r.rejuvenation.stage, 'linhas finas e firmeza');
+  const titles = r.rejuvenation.items.map((i) => i.title).join(' | ');
+  for (const t of ['Retinol', 'Peptídeos', 'Vitamina C', 'DMAE', 'Ácido hialurônico']) assert.match(titles, new RegExp(t));
+  // Gestante: sem retinol ativo nem DMAE, com alternativa
+  const g = analyze({ ...P, age: 44, goal: 'linhas' }, { ...SAFE_HEALTH, h7: 'sim' }, { ...OILY_SKIN, s8: ['linhas', 'firmeza'], s12: 'linhas' });
+  assert.ok(!g.rejuvenation.items.some((i) => i.title === 'DMAE'));
+  assert.match(g.rejuvenation.items.find((i) => i.title === 'Retinol').text, /não é indicado/);
+  assert.ok(keys(g).includes('peptideos'));
+  // Jovem sem queixa de envelhecimento: sem seção; menor: nunca
+  assert.equal(analyze({ ...P, age: 22 }, SAFE_HEALTH, OILY_SKIN).rejuvenation, null);
+  assert.equal(analyze({ ...P, age: 15 }, SAFE_HEALTH, { ...OILY_SKIN, s12: 'linhas' }).rejuvenation, null);
 });
 
 test('pele mista pela zona T', () => {
@@ -46,10 +69,16 @@ test('pele mista pela zona T', () => {
   assert.equal(r.skinType, 'mista');
 });
 
-test('respostas "não sei" → perfil indeterminado, confiança baixa', () => {
+test('respostas "não sei" → mesmo assim um dos quatro tipos (confiança baixa só no painel)', () => {
+  const tipos = ['normal', 'seca', 'oleosa', 'mista'];
   const r = analyze(P, SAFE_HEALTH, { ...OILY_SKIN, s1: 'nao_sei', s2: 'depende', s3: 'nao_sei', s4: 'nao_sei', s5: 'nao_sei', s6: 'varias', s7: 'nao_sei' });
-  assert.equal(r.skinType, 'indeterminado');
+  assert.ok(tipos.includes(r.skinType));
+  assert.equal(r.skinType, 'oleosa', 'oleosidade como incômodo desempata');
   assert.equal(r.confidence, 'baixo');
+  const vazio = analyze(P, SAFE_HEALTH, { ...OILY_SKIN, s1: 'nao_sei', s2: 'depende', s3: 'nao_sei', s4: 'nao_sei', s5: 'nao_sei', s6: 'varias', s7: 'nao_sei', s8: ['nenhuma'], s12: 'outro' });
+  assert.ok(tipos.includes(vazio.skinType));
+  const varia = analyze(P, SAFE_HEALTH, { ...OILY_SKIN, s1: 'varia', s2: 'depende', s3: 'nao_sei', s8: ['nenhuma'], s12: 'outro' });
+  assert.equal(varia.skinType, 'mista');
 });
 
 test('gravidez: nunca retinoide nem ácido salicílico', () => {

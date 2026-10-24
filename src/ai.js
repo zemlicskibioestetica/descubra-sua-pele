@@ -13,7 +13,7 @@ Regras obrigatórias:
 - Informe apenas a conclusão (o perfil de pele mais provável e, se houver, sinais de desidratação). NÃO cite nem repita as respostas da pessoa e não explique como a classificação foi feita.
 - Não prometa resultados, não fale em cura e não recomende medicamentos ou procedimentos.
 - Se houver sinal de alerta, acrescente uma frase recomendando avaliação profissional.
-- Se o perfil for indeterminado, diga que não foi possível determinar com segurança.
+- Sempre afirme o tipo de pele informado nos fatos; nunca diga que não foi possível determinar.
 - Escreva no máximo 2 frases curtas, em segunda pessoa, sem títulos, listas ou markdown.`;
 
 export function aiConfigured() {

@@ -26,12 +26,7 @@
         <h1 class="visually-hidden">SEU PERFIL DE PELE</h1>
         <p class="muted" style="margin:0">${esc(d.name)}</p>
         <p class="skin-type">${esc(r.skinTypeLabel)}</p>
-        <div class="chips">
-          <span class="chip">Confiança: <strong>${esc(r.confidenceLabel)}</strong></span>
-          <span class="chip">Sensibilidade: <strong>${esc(r.assessments.sensitivity)}</strong></span>
-          <span class="chip">Tendência a acne: <strong>${esc(r.assessments.acneTendency)}</strong></span>
-          ${r.assessments.dehydration ? '<span class="chip"><strong>Sinais de desidratação</strong></span>' : ''}
-        </div>
+        ${r.assessments.dehydration ? '<div class="chips"><span class="chip"><strong>Com sinais de desidratação</strong></span></div>' : ''}
         <p class="small muted" style="margin:0">Gerado em ${esc(d.generatedAt)}</p>
       </section>
 
@@ -40,14 +35,24 @@
       <section class="card">
         <h2>Resultado</h2>
         ${paragraphs}
-        <p class="small muted">${esc(r.confidenceNote)}${d.explanationByAI ? ' Texto redigido com apoio de inteligência artificial a partir das regras de análise.' : ''}</p>
       </section>
 
-      <section class="card"><h2>Principais necessidades cosméticas</h2>${list(r.needs)}</section>
-      <section class="card"><h2>Fatores que podem influenciar sua pele</h2>${list(r.factors)}</section>
+      <section class="card"><h2>O que sua pele precisa e como cuidar</h2>
+        <div class="needs">${r.needs.map((n) => typeof n === 'string' ? `<p>${esc(n)}</p>`
+          : `<div class="need"><p class="need-problem">${esc(n.problem)}</p><p class="need-solution">${esc(n.solution)}</p></div>`).join('')}</div>
+      </section>
+      <section class="card"><h2>Dicas para o seu dia a dia</h2>${list(r.factors)}</section>
 
       <section class="card"><p class="eyebrow">Rotina personalizada</p><h2>Manhã</h2>${steps(r.morning)}</section>
       <section class="card"><p class="eyebrow">Rotina personalizada</p><h2>Noite</h2>${steps(r.night)}</section>
+
+      ${r.rejuvenation ? `<section class="card rejuv">
+        <p class="eyebrow">Rejuvenescimento · foco em ${esc(r.rejuvenation.stage)}</p>
+        <h2>Cuidados para rejuvenescer a pele</h2>
+        <p>${esc(r.rejuvenation.intro)}</p>
+        <div class="needs">${r.rejuvenation.items.map((it) => `<div class="need"><p class="need-problem">${esc(it.title)}</p><p class="need-solution">${esc(it.text)}</p></div>`).join('')}</div>
+        <p class="small muted" style="margin-top:12px">Introduza um ativo novo de cada vez. ${esc(r.rejuvenation.professional)}</p>
+      </section>` : ''}
 
       <section class="card">
         <h2>Ativos que podem fazer sentido para sua pele</h2>
