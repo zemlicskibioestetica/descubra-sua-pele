@@ -54,6 +54,21 @@ export const SOURCES = {
   kojic: src(
     'Saeedi M, Eslamifar M, Khezri K. Kojic acid applications in cosmetic and pharmaceutical preparations. Biomed Pharmacother. 2019;110:582-593.',
     'Kojic acid applications in cosmetic and pharmaceutical preparations'),
+  thiamidol: src(
+    'Arrowitz C, et al. Effective Tyrosinase Inhibition by Thiamidol Results in Significant Improvement of Mild to Moderate Melasma. J Invest Dermatol. 2019;139(8):1691-1698.',
+    'Effective Tyrosinase Inhibition by Thiamidol Results in Significant Improvement of Mild to Moderate Melasma'),
+  cysteamine: src(
+    'Mansouri P, et al. Evaluation of the efficacy of cysteamine 5% cream in the treatment of epidermal melasma: a randomized double-blind placebo-controlled trial. Br J Dermatol. 2015;173(1):209-217.',
+    'Evaluation of the efficacy of cysteamine 5% cream in the treatment of epidermal melasma'),
+  centella: src(
+    'Su Z, et al. The Effectiveness and Safety of a Skin Care Product With Centella asiatica Leaf Extract, Ceramide NP, and Panthenol in Subjects With Sensitive Skin. J Cosmet Dermatol. 2025;24(7):e70324.',
+    'Centella asiatica Leaf Extract, Ceramide NP, and Panthenol in Subjects With Sensitive Skin'),
+  bakuchiol: src(
+    'Dhaliwal S, et al. Prospective, randomized, double-blind assessment of topical bakuchiol and retinol for facial photoageing. Br J Dermatol. 2019;180(2):289-296.',
+    'Prospective, randomized, double-blind assessment of topical bakuchiol and retinol for facial photoageing'),
+  pdrn: src(
+    'Squadrito F, et al. Pharmacological Activity and Clinical Use of PDRN. Front Pharmacol. 2017;8:224.',
+    'Pharmacological Activity and Clinical Use of PDRN'),
   acneGuideline: src(
     'Zaenglein AL, et al. Guidelines of care for the management of acne vulgaris. J Am Acad Dermatol. 2016;74(5):945-973.',
     'Guidelines of care for the management of acne vulgaris'),
@@ -88,13 +103,40 @@ export const ACTIVES = {
     sources: [SOURCES.hydroxyAcids],
   },
   clareadores: {
-    name: 'Ácidos clareadores (ácido tranexâmico, alfa-arbutin, ácido kójico)',
-    purpose: 'Ativos cosméticos que ajudam a uniformizar o tom da pele.',
-    benefits: 'Podem suavizar a aparência de manchas com uso contínuo, sempre associados ao protetor solar.',
-    fit: 'Sérum à noite (alguns também de manhã), após a limpeza e antes do hidratante.',
-    cautions: 'Os resultados levam semanas. Sem protetor solar diário, as manchas tendem a voltar.',
+    name: 'Clareadores (tiamidol, ácido tranexâmico, cisteamina, alfa-arbutin, ácido kójico)',
+    purpose: 'Ativos cosméticos de última geração para uniformizar o tom e suavizar manchas.',
+    benefits: 'Podem suavizar a aparência de manchas e melasma leve com uso contínuo, sempre junto com o protetor solar.',
+    fit: 'Sérum ou creme à noite (o tiamidol e o tranexâmico também podem ser usados de manhã). A cisteamina é aplicada por poucos minutos e depois enxaguada, conforme o rótulo.',
+    cautions: 'Os resultados levam de 8 a 12 semanas. A cisteamina tem cheiro forte e pode arder no início. Sem protetor solar diário, as manchas voltam.',
     professional: 'Melasma e manchas que mudam de cor ou tamanho precisam de avaliação profissional.',
-    sources: [SOURCES.tranexamic, SOURCES.kojic],
+    sources: [SOURCES.thiamidol, SOURCES.tranexamic, SOURCES.cysteamine, SOURCES.kojic],
+  },
+  centella: {
+    name: 'Centella asiática (cica)',
+    purpose: 'Extrato calmante muito usado em cremes para pele sensível e irritada.',
+    benefits: 'Pode reduzir a vermelhidão e o desconforto e ajudar na recuperação da barreira da pele.',
+    fit: 'Em sérum ou creme, manhã e noite; costuma vir combinada com pantenol (B5).',
+    cautions: 'Apesar de calmante, algumas pessoas têm alergia: faça teste em pequena área.',
+    professional: 'Vermelhidão persistente pode ser rosácea e merece avaliação.',
+    sources: [SOURCES.centella],
+  },
+  bakuchiol: {
+    name: 'Bakuchiol',
+    purpose: 'Ativo vegetal usado como alternativa mais suave ao retinol.',
+    benefits: 'Em estudo comparativo, melhorou rugas e manchas de forma semelhante ao retinol, com menos ressecamento e ardência.',
+    fit: 'Sérum à noite (ou manhã e noite), boa opção para pele sensível que não tolera retinol.',
+    cautions: 'Não há dados suficientes de segurança na gestação: nesse caso, não use sem orientação.',
+    professional: 'Para linhas mais marcadas, a avaliação individual indica o que mais pode ajudar.',
+    sources: [SOURCES.bakuchiol],
+  },
+  pdrn: {
+    name: 'PDRN ("DNA de salmão")',
+    purpose: 'Tendência da cosmética coreana em séruns de recuperação e viço.',
+    benefits: 'É associado à regeneração e ao viço da pele; os estudos em cosméticos de uso em casa ainda são limitados.',
+    fit: 'Sérum à noite ou em noites alternadas com o retinol, como complemento.',
+    cautions: 'Use como complemento, não como substituto do retinol e do protetor solar.',
+    professional: 'Na forma injetável, o PDRN é um procedimento profissional e precisa de avaliação.',
+    sources: [SOURCES.pdrn],
   },
   pantenol: {
     name: 'Pantenol (vitamina B5)',

@@ -185,7 +185,10 @@ function selectActives(type, a, f, s, age) {
   if (f.basicOnly || f.minor) {
     // Somente cuidados básicos (sinais de alerta, tratamento em curso, procedimento recente, condição dermatológica ou menor de idade)
   } else if (highSens) {
-    add('niacinamida', 'am', 'Sensibilidade relatada: priorizamos um ativo de boa tolerância e o fortalecimento da barreira antes de qualquer ativo mais intenso.');
+    add('niacinamida', 'am', 'Para pele sensível, a niacinamida é um ativo bem tolerado que fortalece a barreira antes de ativos mais intensos.');
+    if (['linhas', 'prevencao'].includes(priority) && !f.pregnancy && !f.pregnancyUnknown && age >= 21) {
+      add('bakuchiol', 'pm', 'Para linhas finas em pele sensível, o bakuchiol é a alternativa mais suave ao retinol.');
+    }
   } else {
     switch (priority) {
       case 'oleosidade':
@@ -199,7 +202,7 @@ function selectActives(type, a, f, s, age) {
       case 'manchas':
         add('vitamina_c', 'am', 'Para manchas, a vitamina C pela manhã ajuda a uniformizar o tom e potencializa o protetor solar.');
         if (f.pregnancy || f.pregnancyUnknown) add('acido_azelaico', 'pm', 'Para manchas com mais segurança neste momento, o ácido azelaico costuma ser a alternativa — use com orientação profissional.');
-        else if (!f.noAcids) add('clareadores', 'pm', 'Para manchas, séruns com ácido tranexâmico, alfa-arbutin ou ácido kójico ajudam a clarear e uniformizar o tom.');
+        else if (!f.noAcids) add('clareadores', 'pm', 'Para manchas, os clareadores mais atuais (tiamidol, ácido tranexâmico, cisteamina ou alfa-arbutin) ajudam a clarear e uniformizar o tom.');
         break;
       case 'luminosidade':
         add('vitamina_c', 'am', 'Para devolver a luminosidade, a vitamina C é o ativo mais indicado pela manhã.');
@@ -231,7 +234,10 @@ function selectActives(type, a, f, s, age) {
   add('acido_hialuronico', 'hidratacao', type === 'seca' ? 'Para o ressecamento, o sérum de ácido hialurônico repõe a água da pele antes do hidratante.'
     : a.dehydration ? 'Há sinais de desidratação: o ácido hialurônico repõe a água sem deixar a pele oleosa.'
       : 'O ácido hialurônico mantém a pele hidratada e com viço, em qualquer tipo de pele.');
-  if (highSens || f.recentProcedure || f.dermDx) add('pantenol', 'hidratacao', 'O pantenol (vitamina B5) acalma e ajuda a recuperar a pele sensibilizada.');
+  if (highSens || f.recentProcedure || f.dermDx) {
+    add('centella', 'hidratacao', 'A centella asiática (cica) acalma a vermelhidão e ajuda a recuperar a pele sensibilizada.');
+    add('pantenol', 'hidratacao', 'O pantenol (vitamina B5) acalma e ajuda a recuperar a barreira da pele.');
+  }
   add('filtro_solar', 'fps', 'A fotoproteção diária é recomendada para todos os tipos de pele.');
 
   // Limite: no máximo 1 tratamento de manhã e 1 à noite
@@ -393,12 +399,20 @@ function buildRejuvenation({ age, goal, s, f, a, actives }) {
       : f.recentProcedure ? 'após um procedimento recente, é preciso aguardar a liberação do profissional'
         : 'pelo seu histórico, ele deve ser usado somente com orientação profissional';
     items.push({ title: 'Retinol', text: `É um dos ativos mais estudados para linhas finas e textura, mas ${why}. Os peptídeos são uma alternativa mais suave.` });
+  } else if (a.sensitivity === 'alta') {
+    items.push({
+      title: 'Bakuchiol à noite',
+      text: inRoutine('bakuchiol')
+        ? 'Já está na sua rotina da noite: alternativa vegetal ao retinol, com resultados parecidos em linhas e manchas e menos irritação, ideal para pele sensível.'
+        : 'Alternativa vegetal ao retinol, com resultados parecidos em linhas e manchas e menos irritação, ideal para pele sensível.',
+    });
   } else {
     items.push({
-      title: 'Retinol à noite',
-      text: inRoutine('retinoide')
-        ? 'Já está na sua rotina da noite: comece com 2 a 3 noites por semana e aumente conforme a pele se adaptar. Estimula a renovação e suaviza linhas finas.'
-        : 'Inclua depois que a rotina atual estiver adaptada (cerca de 4 semanas), começando com 2 a 3 noites por semana. Estimula a renovação e suaviza linhas finas.',
+      title: 'Retinol ou retinal à noite',
+      text: (inRoutine('retinoide')
+        ? 'Já está na sua rotina da noite: comece com 2 a 3 noites por semana e aumente conforme a pele se adaptar.'
+        : 'Inclua depois que a rotina atual estiver adaptada (cerca de 4 semanas), começando com 2 a 3 noites por semana.')
+        + ' Estimula a renovação e suaviza linhas finas. O retinal (retinaldeído) é a versão que age mais rápido, indicada para quem já usa retinol sem irritação.',
     });
   }
   items.push({
@@ -420,6 +434,12 @@ function buildRejuvenation({ age, goal, s, f, a, actives }) {
     title: 'Ácido hialurônico',
     text: 'Sérum que repõe a água da pele e deixa um aspecto mais preenchido e luminoso. Pode ser usado de manhã e à noite, em qualquer tipo de pele.',
   });
+  if (age >= 30 && !pregnantOrUnknown) {
+    items.push({
+      title: 'PDRN ("DNA de salmão") — tendência',
+      text: 'Ativo que veio da cosmética coreana e aparece em séruns de recuperação e viço. Os estudos em cosméticos de uso em casa ainda são limitados: use como complemento, nunca no lugar do retinol e do protetor.',
+    });
+  }
 
   return {
     headline: `Também preparamos cuidados de rejuvenescimento com foco em ${stage.label}.`,
@@ -439,19 +459,22 @@ function buildNeeds({ type, a, f, s, actives }) {
   const push = (problem, solution) => { if (!out.some((x) => x.problem === problem)) out.push({ problem, solution }); };
 
   if (has2('linhas') || s.s12 === 'prevencao') {
+    const night = f.noRetinoid ? 'Sérum com peptídeos à noite'
+      : a.sensitivity === 'alta' ? 'Bakuchiol à noite (alternativa suave ao retinol)'
+        : 'Retinol ou retinal à noite (2 a 3 vezes por semana no início)';
     push(s.s12 === 'prevencao' && !has(s.s8, 'linhas') ? 'Prevenção do envelhecimento' : 'Linhas finas',
-      `${f.noRetinoid ? 'Sérum com peptídeos à noite' : 'Retinol à noite (2 a 3 vezes por semana no início)'}, vitamina C pela manhã e protetor solar todos os dias.`);
+      `${night}, vitamina C pela manhã e protetor solar todos os dias.`);
   }
   if (has(s.s8, 'firmeza')) push('Perda de firmeza', `Peptídeos${f.pregnancy || f.pregnancyUnknown ? '' : ' e DMAE'} em sérum ou creme, ácido hialurônico para dar volume de hidratação e ${f.noRetinoid ? 'avaliação profissional para protocolos de firmeza' : 'retinol à noite'}.`);
-  if (has2('manchas')) push('Manchas', `Protetor solar com cor todos os dias, vitamina C pela manhã e ${f.pregnancy || f.pregnancyUnknown ? 'ácido azelaico à noite (com orientação)' : f.noAcids ? 'avaliação profissional antes de usar clareadores' : 'sérum clareador à noite (ácido tranexâmico, alfa-arbutin ou ácido kójico)'}.`);
-  if (has2('oleosidade') || type === 'oleosa') push('Oleosidade e brilho', 'Limpeza com gel 2 vezes ao dia (sem exagerar), niacinamida pela manhã, hidratante oil-free e protetor de toque seco.');
+  if (has2('manchas')) push('Manchas', `Protetor solar com cor todos os dias, vitamina C pela manhã e ${f.pregnancy || f.pregnancyUnknown ? 'ácido azelaico à noite (com orientação)' : f.noAcids ? 'avaliação profissional antes de usar clareadores' : 'sérum clareador à noite (tiamidol, ácido tranexâmico, cisteamina ou alfa-arbutin)'}.`);
+  if (has2('oleosidade') || type === 'oleosa') push('Oleosidade e brilho', 'Limpeza com gel 2 vezes ao dia (sem exagerar), sérum de niacinamida com zinco PCA pela manhã, hidratante oil-free e protetor de toque seco.');
   if (has2('acne')) push('Cravos e espinhas', `${f.noSalicylic ? (f.pregnancy ? 'Ácido azelaico à noite (com orientação)' : 'Niacinamida e avaliação profissional') : 'Ácido salicílico à noite'} e niacinamida pela manhã. Não esprema: isso deixa manchas e marcas.`);
   if (has(s.s8, 'poros')) push('Poros aparentes', `Niacinamida pela manhã${!f.noSalicylic ? ' e ácido salicílico 2 a 3 noites por semana' : ''}; mantenha a pele limpa e hidratada.`);
   if (has2('textura')) push('Textura irregular', canAcids ? 'Ácido glicólico 1 a 3 noites por semana (não na mesma noite do retinol) e protetor solar diário.' : 'Niacinamida, hidratação com ácido hialurônico e avaliação para uma esfoliação adequada.');
   if (has2('luminosidade')) push('Falta de luminosidade', `Vitamina C pela manhã${canAcids ? ' e ácido glicólico 1 a 2 noites por semana' : ''}, ácido hialurônico e protetor solar.`);
   if (has(s.s8, 'ressecamento') || s.s12 === 'hidratacao' || type === 'seca') push('Ressecamento', 'Limpador cremoso, sérum de ácido hialurônico antes do hidratante e creme mais nutritivo à noite. Evite água quente no rosto.');
   if (a.dehydration && type !== 'seca') push('Desidratação', 'Sérum de ácido hialurônico de manhã e à noite e hidratante leve. A pele pode ser oleosa e, ainda assim, ter falta de água.');
-  if (has(s.s8, 'sensibilidade') || a.sensitivity === 'alta') push('Sensibilidade', 'Poucos produtos, todos sem fragrância, e pantenol (vitamina B5) para acalmar. Introduza um ativo novo por vez.');
+  if (has(s.s8, 'sensibilidade') || a.sensitivity === 'alta') push('Sensibilidade', 'Poucos produtos, todos sem fragrância, com centella asiática (cica) e pantenol (vitamina B5) para acalmar. Introduza um ativo novo por vez.');
   if (type === 'mista' && !out.some((x) => x.problem.startsWith('Oleosidade'))) push('Zona T oleosa e bochechas mais secas', 'Hidratante leve no rosto todo e niacinamida na zona T; reforce a hidratação só nas bochechas.');
   if (!out.length) push('Manter a pele saudável', `Limpeza suave, ${inR('niacinamida') ? 'niacinamida' : 'ácido hialurônico'}, hidratante e protetor solar todos os dias.`);
   return out;

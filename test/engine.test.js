@@ -64,6 +64,17 @@ test('rejuvenescimento conforme idade e queixa, com ativos de mercado', () => {
   assert.equal(analyze({ ...P, age: 15 }, SAFE_HEALTH, { ...OILY_SKIN, s12: 'linhas' }).rejuvenation, null);
 });
 
+test('ativos atuais: bakuchiol e cica para pele sensível; clareadores modernos para manchas', () => {
+  const sens = analyze({ ...P, age: 45, goal: 'linhas' }, SAFE_HEALTH, { ...OILY_SKIN, s2: 'sensivel', s4: 'vermelha_arde', s8: ['linhas', 'sensibilidade'], s12: 'linhas' });
+  assert.ok(keys(sens).includes('bakuchiol') && keys(sens).includes('centella'));
+  assert.ok(!keys(sens).includes('retinoide'), 'pele sensível não recebe retinol');
+  const manchas = analyze({ ...P, age: 35 }, SAFE_HEALTH, { ...OILY_SKIN, s8: ['manchas'], s12: 'manchas' });
+  assert.match(manchas.actives.find((x) => x.key === 'clareadores').name, /tiamidol/);
+  const gest = analyze({ ...P, age: 32 }, { ...SAFE_HEALTH, h7: 'sim' }, { ...OILY_SKIN, s8: ['manchas', 'linhas'], s12: 'manchas' });
+  assert.ok(!keys(gest).some((k) => ['retinoide', 'bakuchiol', 'clareadores'].includes(k)));
+  assert.ok(!gest.rejuvenation.items.some((i) => /PDRN|DMAE/.test(i.title)));
+});
+
 test('pele mista pela zona T', () => {
   const r = analyze(P, SAFE_HEALTH, { ...OILY_SKIN, s1: 'oleosa_t', s2: 'confortavel', s3: 'nariz_testa', s5: 'zona_t', s6: 'irregular' });
   assert.equal(r.skinType, 'mista');
