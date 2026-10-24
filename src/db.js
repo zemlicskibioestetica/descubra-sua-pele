@@ -9,9 +9,24 @@ fs.mkdirSync(DATA_DIR, { recursive: true });
 
 // Banco: Turso (gratuito, na nuvem) quando TURSO_DATABASE_URL estiver definido;
 // caso contrário, um arquivo local em DATA_DIR (desenvolvimento e testes).
-const client = createClient(process.env.TURSO_DATABASE_URL
-  ? { url: process.env.TURSO_DATABASE_URL, authToken: process.env.TURSO_AUTH_TOKEN }
-  : { url: pathToFileURL(path.join(DATA_DIR, 'app.db')).href });
+function tursoConfig() {
+  const values = [process.env.TURSO_DATABASE_URL, process.env.TURSO_AUTH_TOKEN].map((v) => (v || '').trim().replace(/^["']|["']$/g, ''));
+  if (!values.some(Boolean)) return null;
+  // Aceita os dois campos mesmo se tiverem sido colados trocados
+  const url = values.find((v) => /^(libsql|https?|wss?):\/\//i.test(v));
+  const authToken = values.find((v) => v && v !== url);
+  if (!url) throw new Error('Configuração do Turso: nenhum dos campos TURSO_DATABASE_URL/TURSO_AUTH_TOKEN contém o endereço do banco (deve começar com libsql://).');
+  if (!authToken) throw new Error('Configuração do Turso: falta o token (TURSO_AUTH_TOKEN).');
+  return { url, authToken };
+}
+
+let client;
+try {
+  client = createClient(tursoConfig() || { url: pathToFileURL(path.join(DATA_DIR, 'app.db')).href });
+} catch (e) {
+  // Mensagem curta, sem repetir valores secretos nos registros
+  throw new Error(e.code === 'URL_INVALID' ? 'Configuração do Turso: o endereço do banco é inválido (deve começar com libsql://).' : e.message);
+}
 
 const toObjects = (rs) => rs.rows.map((r) => Object.fromEntries(rs.columns.map((c, i) => [c, r[i]])));
 const clean = (args) => args.map((a) => (a === undefined ? null : typeof a === 'boolean' ? (a ? 1 : 0) : a));
