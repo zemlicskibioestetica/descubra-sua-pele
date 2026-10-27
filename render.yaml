@@ -10,6 +10,9 @@ services:
     buildCommand: npm ci
     startCommand: npm start
     healthCheckPath: /saude
+    # Domínio próprio (Registro.br); o Render cria o www e redireciona para o principal
+    domains:
+      - descubrasuapele.com.br
     envVars:
       - key: NODE_ENV
         value: production
