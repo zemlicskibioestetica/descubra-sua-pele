@@ -246,7 +246,7 @@ export const SETTING_DEFS = {
   wa_template_participant: { label: 'Nome do modelo aprovado — envio do resultado ao participante', default: '' },
   wa_template_lang: { label: 'Idioma dos modelos', default: 'pt_BR' },
   anthropic_api_key: { label: 'Chave da API Claude (explicações em linguagem simples)', secret: true, default: '' },
-  public_base_url: { label: 'Endereço público do site (após publicação)', default: '' },
+  public_base_url: { label: 'Endereço público do site (após publicação)', default: 'https://descubrasuapele.com.br' },
   tiktok_url: { label: 'Perfil do TikTok (destino principal do botão "Quero conhecer a Dra. Fernanda")', default: 'https://www.tiktok.com/@drafernandabiomedica' },
   instagram_url: { label: 'Perfil do Instagram (opção para quem não tem TikTok)', default: 'https://www.instagram.com/drafernandabiomedica/' },
   privacy_contact_email: { label: 'E-mail para solicitações de privacidade (LGPD)', default: '' },
